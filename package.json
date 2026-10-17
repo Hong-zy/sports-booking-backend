@@ -1,0 +1,16 @@
+{
+  "name": "sports-booking-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "运动场馆易约 - 后端 API（零第三方依赖，Node 内置 http + sqlite）",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node src/seed.js",
+    "test": "node test/smoke.mjs"
+  }
+}
