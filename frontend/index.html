@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#1668dc" />
+  <meta name="description" content="运动场馆易约：查找场馆空闲时段，在线锁定并预约运动场地。" />
+  <title>运动场馆易约</title>
+  <link rel="stylesheet" href="./css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%B8%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <a class="skip-link" href="#app">跳到主内容</a>
+
+  <header id="app-header" class="app-header"></header>
+
+  <main id="app" class="app-main" tabindex="-1">
+    <div class="boot-loading" role="status">
+      <span class="spinner" aria-hidden="true"></span>
+      <p>正在启动运动场馆易约…</p>
+    </div>
+  </main>
+
+  <footer class="app-footer">
+    <div class="app-footer__inner">
+      <span>运动场馆易约 · 纯原生 JavaScript SPA</span>
+      <span>版本 <span id="app-version">2.0.0</span> · 离线可用</span>
+    </div>
+  </footer>
+
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="false"></div>
+
+  <noscript>
+    <div class="noscript">本系统需要启用 JavaScript 才能使用，请在浏览器设置中开启后刷新页面。</div>
+  </noscript>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

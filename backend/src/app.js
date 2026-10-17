@@ -8,6 +8,7 @@ import { addClient, removeClient, clientCount } from './events.js';
 import { HttpError, readBody, sendError, sendJson } from './http.js';
 import { createRouter } from './router.js';
 import { sweep } from './core.js';
+import { APP_NAME, APP_VERSION } from '../../shared/constants.js';
 import { registerRoutes as registerAdmin } from './routes/admin.js';
 import { registerRoutes as registerAuth } from './routes/auth.js';
 import { registerRoutes as registerBookings } from './routes/bookings.js';
@@ -17,20 +18,60 @@ import { seedIfEmpty } from './seed.js';
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
 };
 
-const publicDir = path.join(config.root, 'public');
+/** 静态资源分区：/shared/* -> shared 目录，其余 -> frontend 目录 */
+const STATIC_ROOTS = [
+  { prefix: '/shared/', dir: config.sharedDir },
+  { prefix: '/', dir: config.frontendDir },
+];
+
+function resolveStatic(pathname) {
+  for (const { prefix, dir } of STATIC_ROOTS) {
+    if (!pathname.startsWith(prefix)) continue;
+    let rel = pathname.slice(prefix.length);
+    if (!rel || rel.endsWith('/')) rel += 'index.html';
+    const file = path.resolve(dir, decodeURIComponent(rel));
+    if (!file.startsWith(dir)) return null;
+    return file;
+  }
+  return null;
+}
+
+function serveStatic(res, pathname) {
+  const file = resolveStatic(pathname);
+  if (!file || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+    const body = JSON.stringify({
+      name: `${APP_NAME} API`,
+      version: APP_VERSION,
+      frontend: '/',
+      health: '/api/health',
+      docs: '见 README.md',
+    });
+    res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(body);
+  }
+  const body = fs.readFileSync(file);
+  res.writeHead(200, {
+    'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
+    'Cache-Control': 'no-cache',
+  });
+  return res.end(body);
+}
 
 function buildHandler(router) {
   return async function handler(req, res) {
     const started = Date.now();
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, DELETE, OPTIONS');
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
       return res.end();
@@ -80,19 +121,6 @@ function buildHandler(router) {
   };
 }
 
-function serveStatic(res, pathname) {
-  const rel = pathname === '/' ? 'index.html' : decodeURIComponent(pathname).replace(/^\/+/, '');
-  const file = path.resolve(publicDir, rel);
-  if (!file.startsWith(publicDir) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
-    const body = JSON.stringify({ name: '运动场馆易约 API', docs: '见 README.md', demo: '/' });
-    res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
-    return res.end(body);
-  }
-  const body = fs.readFileSync(file);
-  res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
-  return res.end(body);
-}
-
 export function createApp({ withSweeper = true } = {}) {
   seedIfEmpty();
   const router = createRouter();
@@ -100,6 +128,15 @@ export function createApp({ withSweeper = true } = {}) {
   registerVenues(router);
   registerBookings(router);
   registerAdmin(router);
+
+  // 公共健康检查（前端启动时可用它确认后端在线）
+  router.get('/api/health', () => ({
+    ok: true,
+    name: APP_NAME,
+    version: APP_VERSION,
+    now: new Date().toISOString(),
+    sseClients: clientCount(),
+  }));
 
   const server = http.createServer(buildHandler(router));
   const timer = withSweeper ? setInterval(() => {

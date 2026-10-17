@@ -1,12 +1,24 @@
 /**
- * 端到端冒烟测试：注册/登录 -> 查场馆 -> 查可用时段 -> 锁定 -> 冲突提示 -> 确认预约
- *                -> 我的预约 -> 取消规则 -> 管理后台（维护标记/报表/强制取消/通知）
+ * 端到端冒烟测试（v2：前后端分离 + 数据库可编辑）
+ *
+ * 覆盖：
+ *  [1] 账号与权限        [2] 场馆与实时可用性     [3] 先到先得锁定与预约
+ *  [4] 取消规则          [5] 管理后台             [6] 实时推送 (SSE)
+ *  [7] 并发抢占          [8] 2 小时取消规则
+ *  [9] shared 前后端公用模块
+ *  [10] 数据库可编辑（场馆/场地/用户/资料/数据库浏览）
+ *  [11] 前端静态资源与健康检查
+ *
  * 运行：npm test
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+import { DB_TABLES, SLOT_STATUS_LABEL } from '../../shared/constants.js';
+import { parseHM, toHM } from '../../shared/time.js';
+import { validateVenueInput } from '../../shared/validate.js';
 
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'booking-test-'));
 process.env.DB_PATH = path.join(tmpDir, 'test.db');
@@ -55,6 +67,8 @@ try {
   ok('手机号注册成功', reg.status === 200 && reg.data.user.points === 100);
   const dup = await api('POST', '/api/auth/register', { body: { name: '重复', phone: '13700000001', password: 'abc123456' } });
   ok('重复注册被拒绝', dup.status === 409);
+  const badPhone = await api('POST', '/api/auth/register', { body: { name: '格式错误', phone: '123', password: 'abc123456' } });
+  ok('公用校验器拦截非法手机号', badPhone.status === 400);
 
   const me = await api('GET', '/api/me', { token: reg.data.token });
   ok('个人中心返回积分', me.data.points === 100 && me.data.stats);
@@ -190,6 +204,69 @@ try {
   ok('距开场不足 2 小时不能自助取消', soonCancel.status === 409);
   const adminSoonCancel = await api('POST', `/api/admin/bookings/${Number(inserted.lastInsertRowid)}/cancel`, { token: admin, body: { reason: '特殊情况' } });
   ok('管理员可代为取消临场预约', adminSoonCancel.status === 200);
+
+  console.log('\n[9] shared 前后端公用模块');
+  ok('公用常量：时段状态文案一致', SLOT_STATUS_LABEL.locked === '锁定中' && SLOT_STATUS_LABEL.booked === '已预约');
+  ok('公用常量：数据库表白名单', DB_TABLES.length === 7 && DB_TABLES.includes('bookings'));
+  ok('公用时间工具可双向转换', toHM(parseHM('09:30')) === '09:30' && parseHM('25:00') === null);
+  ok('公用校验器拦截非法场馆', validateVenueInput({ name: '', sport: '', openTime: '22:00', closeTime: '08:00', slotMinutes: 5 }).length >= 3);
+  ok('公用校验器放行合法场馆', validateVenueInput({ name: '合规场馆', sport: '羽毛球', openTime: '08:00', closeTime: '22:00', slotMinutes: 60 }).length === 0);
+  const invalidVenue = await api('POST', '/api/admin/venues', { token: admin, body: { name: '', sport: '', openTime: 'aa', closeTime: 'bb', slotMinutes: 0 } });
+  ok('后端复用公用校验器返回 400', invalidVenue.status === 400);
+
+  console.log('\n[10] 数据库可编辑（后台增删改）');
+  const tempVenue = await api('POST', '/api/admin/venues', { token: admin, body: { name: '临时场馆', address: '测试路 9 号', sport: '网球', openTime: '09:00', closeTime: '21:00', slotMinutes: 60 } });
+  ok('新增场馆', tempVenue.status === 200 && tempVenue.data.id > 0);
+  const edited = await api('PATCH', `/api/admin/venues/${tempVenue.data.id}`, { token: admin, body: { name: '临时场馆（改）', status: 'paused' } });
+  ok('修改场馆信息与状态', edited.data.name === '临时场馆（改）' && edited.data.status === 'paused');
+  const tempCourt = await api('POST', `/api/admin/venues/${tempVenue.data.id}/courts`, { token: admin, body: { name: 'T1 场', pricePerHour: 88 } });
+  ok('新增场地', tempCourt.status === 200 && tempCourt.data.pricePerHour === 88);
+  const editCourt = await api('PATCH', `/api/admin/courts/${tempCourt.data.id}`, { token: admin, body: { pricePerHour: 99, status: 'closed' } });
+  ok('修改场地价格与状态', editCourt.data.pricePerHour === 99 && editCourt.data.status === 'closed');
+  ok('删除场地', (await api('DELETE', `/api/admin/courts/${tempCourt.data.id}`, { token: admin })).status === 200);
+  ok('删除场馆', (await api('DELETE', `/api/admin/venues/${tempVenue.data.id}`, { token: admin })).status === 200);
+
+  const busyVenue = await api('POST', '/api/admin/venues', { token: admin, body: { name: '有预约的场馆', sport: '篮球', openTime: '08:00', closeTime: '22:00', slotMinutes: 60 } });
+  const busyCourt = await api('POST', `/api/admin/venues/${busyVenue.data.id}/courts`, { token: admin, body: { name: 'B1 场', pricePerHour: 60 } });
+  const busyLock = await api('POST', '/api/bookings/lock', { token: demo, body: { courtId: busyCourt.data.id, date: day, startTime: '10:00', endTime: '11:00' } });
+  await api('POST', '/api/bookings', { token: demo, body: { lockId: busyLock.data.lockId } });
+  ok('有有效预约的场馆不能删除', (await api('DELETE', `/api/admin/venues/${busyVenue.data.id}`, { token: admin })).status === 409);
+  ok('有预约的场地不能删除', (await api('DELETE', `/api/admin/courts/${busyCourt.data.id}`, { token: admin })).status === 409);
+
+  const patchUser = await api('PATCH', `/api/admin/users/${reg.data.user.id}`, { token: admin, body: { points: 555, name: '改名用户' } });
+  ok('修改用户积分与昵称', patchUser.data.points === 555 && patchUser.data.name === '改名用户');
+  ok('修改用户角色', (await api('PATCH', `/api/admin/users/${reg.data.user.id}`, { token: admin, body: { role: 'admin' } })).data.role === 'admin');
+  ok('角色可回退', (await api('PATCH', `/api/admin/users/${reg.data.user.id}`, { token: admin, body: { role: 'user' } })).data.role === 'user');
+  const throwUser = await api('POST', '/api/auth/register', { body: { name: '待删除用户', phone: '13700000099', password: 'abc123456' } });
+  ok('删除无关联用户', (await api('DELETE', `/api/admin/users/${throwUser.data.user.id}`, { token: admin })).status === 200);
+  ok('不能删除当前登录账号', (await api('DELETE', `/api/admin/users/${adminLogin.data.user.id}`, { token: admin })).status === 409);
+
+  const patchMe = await api('PATCH', '/api/me', { token: reg.data.token, body: { name: '新昵称' } });
+  ok('用户可修改自己的昵称', patchMe.data.name === '新昵称');
+  ok('用户可修改密码', (await api('POST', '/api/me/password', { token: reg.data.token, body: { oldPassword: 'abc123456', newPassword: 'abc654321' } })).status === 200);
+  ok('新密码可登录', (await api('POST', '/api/auth/login', { body: { account: '13700000001', password: 'abc654321' } })).status === 200);
+  ok('旧密码不能登录', (await api('POST', '/api/auth/login', { body: { account: '13700000001', password: 'abc123456' } })).status === 401);
+  ok('手机号重复校验', (await api('PATCH', '/api/me', { token: demo, body: { phone: '13700000001' } })).status === 409);
+
+  const stats = await api('GET', '/api/admin/stats', { token: admin });
+  ok('数据库统计接口', stats.status === 200 && stats.data.tables.venues >= 5 && typeof stats.data.dbSizeBytes === 'number');
+  const table = await api('GET', '/api/admin/db/venues?limit=5', { token: admin });
+  ok('数据表浏览', table.status === 200 && table.data.columns.includes('name') && table.data.rows.length > 0);
+  ok('非法表名被拒绝', (await api('GET', '/api/admin/db/sqlite_master', { token: admin })).status === 400);
+  const userRows = await api('GET', '/api/admin/db/users?limit=5', { token: admin });
+  ok('用户表浏览时密码哈希被脱敏', userRows.data.columns.includes('password_hash') && userRows.data.rows.every((r) => !('password_hash' in r)));
+
+  console.log('\n[11] 前端静态资源与健康检查');
+  const health = await api('GET', '/api/health');
+  ok('健康检查接口', health.status === 200 && health.data.ok === true);
+  const page = await fetch(`${base}/`);
+  const html = await page.text();
+  ok('前端首页可访问', page.status === 200 && (page.headers.get('content-type') || '').includes('text/html') && /<html/i.test(html));
+  const sharedJs = await fetch(`${base}/shared/constants.js`);
+  ok('公用模块通过 /shared/ 提供给前端', sharedJs.status === 200 && (await sharedJs.text()).includes('SLOT_STATUS'));
+  const css = await fetch(`${base}/css/styles.css`);
+  ok('前端样式文件可访问', css.status === 200);
+  ok('不存在的静态资源返回 404', (await fetch(`${base}/nope.js`)).status === 404);
 
   console.log(`\n全部通过：${passed} 项\n`);
 } catch (err) {

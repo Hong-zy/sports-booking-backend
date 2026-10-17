@@ -1,126 +1,204 @@
-# 运动场馆易约 · 后端 API
+# 运动场馆易约 · 前后端分离版（v2）
 
-按 PRD《运动场馆易约》实现的可用版后端：**零第三方依赖**（Node 内置 `http` + `node:sqlite`），
-开箱即跑，不需要 Redis / PostgreSQL / npm install。
+按 PRD《运动场馆易约》实现的可用版系统，**零第三方依赖**（Node 内置 `http` + `node:sqlite`），
+开箱即跑，不需要 Redis / PostgreSQL / `npm install`。
+
+v2 相比 v1 的三点变化：
+
+1. **代码拆成三块**：`frontend/`（原生 JS 单页应用）、`backend/`（HTTP + 业务 + SQLite）、`shared/`（前后端公用常量、时间工具、表单校验）；
+2. **数据库可编辑**：管理后台可以对场馆、场地、时段标记、预约、用户做增删改，并带「数据库」页直接查看表结构与数据；
+3. **前端是完整界面**：场馆预约、我的预约、消息、个人中心、管理后台五个页面，支持实时刷新。
 
 ## 快速开始
 
 ```bash
 cd sports-booking-backend
-node src/server.js        # 或 npm start
+node backend/src/server.js      # 或 npm start
 ```
 
-打开 http://localhost:3000/ 就是自带的接口演示页（选场馆 → 点时段 → 锁定 → 确认预约 → 我的预约 → 管理员后台）。
+打开 http://localhost:3000/ 就是完整前端界面（无需构建、无需安装依赖）。
+
+Windows 下也可以直接**双击 `1-启动服务.bat`**，脚本会启动服务并自动打开浏览器。
 
 内置账号：
 
 | 角色 | 账号 | 密码 |
 | --- | --- | --- |
-| 管理员 | `admin@yueqiu.local` / `13900000001` | `admin123456` |
+| 管理员 | `admin@yueqiu.local`（或 `13900000001`） | `admin123456` |
 | 普通用户 | `13800000000` | `demo123456` |
+| 普通用户 | `13800000002` | `user123456` |
 
-跑一遍端到端自测（39+ 项断言，含并发抢占/冲突推荐/取消规则/后台报表/SSE 推送）：
-
-```bash
-npm test
-```
-
-环境变量（都可不填，见 `src/config.js`）：`PORT`、`HOST`、`DB_PATH`、`TOKEN_SECRET`、
-`LOCK_MINUTES`（默认 10）、`CANCEL_HOURS`（默认 2）、`BOOKING_DAYS_AHEAD`（默认 30）、`HTTP_LOG=0`（关请求日志）。
+跑一遍端到端自测（`npm test`，或双击 `2-运行自测.bat`）：覆盖账号、场馆查询、先到先得锁定、
+并发不超卖、取消规则、SSE 推送、后台 CRUD、数据库浏览、前端静态资源等 79 项断言。
 
 ## 目录结构
 
 ```
-src/
-  server.js        启动入口
-  app.js           HTTP 服务、路由分发、静态页、SSE 接入
-  config.js        配置
-  db.js            SQLite 建表 + 预编译语句缓存
-  seed.js          初始数据（5 场馆 / 16 场地 / 3 账号 / 示例预约）
-  core.js          业务核心：可用性计算、锁定、预约、取消、通知、定时清扫
-  events.js        SSE 实时广播
-  auth.js          scrypt 密码 + HMAC 令牌 + 角色校验
-  router.js        极简路由
-  routes/          auth / venues / bookings / admin 四组接口
-public/index.html 接口演示页
-test/smoke.mjs    端到端冒烟测试
-data/app.db       运行时生成的数据库文件
+frontend/                  前端（原生 ESM 单页应用，无构建步骤）
+  index.html               入口页面
+  css/styles.css           样式
+  js/api.js                fetch 封装 / 鉴权 / 错误处理 / SSE
+  js/store.js              前端全局状态
+  js/ui.js                 toast、modal、表格等通用组件
+  js/router.js             hash 路由
+  js/pages/user.js         场馆预约 / 我的预约 / 消息 / 个人中心
+  js/pages/admin.js        管理后台（含数据库页）
+  js/main.js               应用入口
+
+backend/                   后端（Node 内置模块，零依赖）
+  src/server.js            启动入口
+  src/app.js               HTTP 服务、路由分发、静态资源、SSE 接入
+  src/config.js            配置（目录约定 / 端口 / 数据库路径 / 业务参数）
+  src/db.js                SQLite 建表 + 预编译语句缓存
+  src/seed.js              初始数据（5 场馆 / 16 场地 / 3 账号 / 示例预约）
+  src/core.js              业务核心：可用性计算、锁定、预约、取消、通知、定时清扫
+  src/events.js            SSE 广播
+  src/auth.js              scrypt 密码 + HMAC 令牌 + 角色校验
+  src/http.js              统一响应 / 错误 / 请求体解析
+  src/router.js            极简路由
+  src/routes/              四组接口：auth / venues / bookings / admin
+  test/smoke.mjs           端到端自测
+
+shared/                    前后端公用模块（两边 import 同一份实现）
+  constants.js             状态枚举、文案、业务默认值、数据库表白名单
+  time.js                  分钟/时间字符串/日期/区间判断等纯函数
+  validate.js              表单校验（注册、资料、场馆、场地、时段标记…）
+
+data/                      运行时自动生成的 SQLite 数据库（.gitignore）
+package.json               根配置与 npm 脚本
+README.md / 提交说明.md / 使用说明.docx
 ```
+
+## 前后端公用部分（shared/）
+
+这是 v2 的结构重点：**同一份代码同时被前后端使用**，保证状态文案与校验规则永远一致。
+
+| 模块 | 后端用法 | 前端用法 |
+| --- | --- | --- |
+| `constants.js` | 路由校验状态取值、数据库表白名单、默认业务参数 | 状态徽章文案、下拉选项、tab 路由表 |
+| `time.js` | 时段对齐、日期比较、区间重叠判断 | 时段表渲染、倒计时、日期显示 |
+| `validate.js` | `POST/PATCH` 接口入参校验（400 响应） | 表单即时校验，提交前就提示 |
+
+引用方式：
+
+```js
+// 后端 backend/src/routes/admin.js
+import { DB_TABLES } from '../../../shared/constants.js';
+import { validateVenueInput } from '../../../shared/validate.js';
+
+// 前端 frontend/js/pages/admin.js（浏览器里由后端把 shared/ 挂到 /shared/ 路径）
+import { DB_TABLES } from '/shared/constants.js';
+import { validateVenueInput } from '/shared/validate.js';
+```
+
+## 数据库
+
+SQLite 单文件数据库，默认位于 `data/app.db`（首次启动自动建表并写入种子数据），
+WAL 模式 + 外键约束。表结构：
+
+| 表 | 说明 |
+| --- | --- |
+| `users` | 用户（手机号/邮箱、scrypt 密码哈希、角色、积分、实名信息） |
+| `venues` | 场馆（运动类型、开放时间、时段长度、营业状态） |
+| `courts` | 场地（所属场馆、每小时价格、启停状态） |
+| `locks` | 时段锁定（10 分钟有效期，先到先得的锁） |
+| `bookings` | 预约（预约码、二维码凭证、金额、状态、取消原因） |
+| `slot_overrides` | 维护中 / 临时关闭的时段标记 |
+| `notifications` | 站内通知 |
+
+**如何改数据**（三种方式，任选）：
+
+1. 界面：用管理员账号登录 → 管理后台（场馆管理 / 场地管理 / 时段标记 / 预约管理 / 用户管理 / 数据库）；
+2. API：见下方「管理后台」接口，全部支持 `POST / PATCH / DELETE`；
+3. 直接改库：停掉服务后用任意 SQLite 工具打开 `data/app.db`。
+
+删除有保护：有有效预约的场馆/场地不能删除、有预约记录的用户不能删除，避免破坏历史数据；
+场馆可改为「暂停营业」。
 
 ## 接口一览
 
 所有接口以 `/api` 开头，鉴权用 `Authorization: Bearer <token>`，错误统一返回
 `{ "error": { "status": 409, "message": "...", "suggestions": [...] } }`。
 
+### 公共
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/health` | 健康检查（版本、SSE 连接数） |
+| GET | `/api/stream?date=&venueId=` | SSE 实时推送（锁定/释放/预约/取消/维护/场馆变更） |
+
 ### 账户
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | `/api/auth/register` | 手机号/邮箱注册（`name`,`phone`或`email`,`password`） |
+| POST | `/api/auth/register` | 手机号/邮箱注册 |
 | POST | `/api/auth/login` | 登录，返回 token |
-| GET | `/api/me` | 个人中心：积分、历史/有效预约数 |
-| POST | `/api/me/verify` | 实名认证（`realName`,`idCard`） |
-| GET | `/api/notifications` | 站内消息（`?unread=1` 只看未读） |
-| POST | `/api/notifications/read` | 标记已读 |
+| GET | `/api/me` | 个人中心（积分、预约统计） |
+| PATCH | `/api/me` | 修改昵称 / 手机号 / 邮箱 |
+| POST | `/api/me/password` | 修改密码 |
+| POST | `/api/me/verify` | 实名认证 |
+| GET / POST | `/api/notifications`、`/api/notifications/read` | 站内信查询 / 标记已读 |
 
-### 场馆与实时查询（对应大型需求 1）
+### 场馆与实时查询
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/sports` | 运动类型列表 |
-| GET | `/api/venues?sport=&keyword=&date=` | 场馆列表 + 当前开放状态 + 可约段数/占用率 |
-| GET | `/api/venues/:id?date=` | 场馆详情（场地、时段配置） |
-| GET | `/api/venues/:id/availability?date=` | 时段轴：逐场地逐时段的 `available/locked/booked/maintenance/closed` |
-| GET | `/api/availability?sport=&date=&startTime=&endTime=` | 按运动类型+日期+时间段筛选可用场地 |
-| GET | `/api/stream?date=&venueId=` | SSE 实时推送（`slot.locked`/`slot.released`/`booking.created`/`booking.cancelled`/`slot.status`），前端无需手动刷新 |
+| GET | `/api/venues?sport=&keyword=&date=` | 场馆列表 + 开放状态 + 可约段数/占用率 |
+| GET | `/api/venues/:id?date=` | 场馆详情（场地 + 时段） |
+| GET | `/api/venues/:id/availability?date=` | 时段轴（逐场地逐时段状态） |
+| GET | `/api/availability?sport=&date=&startTime=&endTime=` | 按条件筛选可用场地 |
 
-### 预约与锁定（对应大型需求 2，先到先得）
+### 预约与锁定
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | `/api/bookings/lock` | 锁定时段 10 分钟并返回 `lockId`、`expiresAt`、`remainSeconds` |
-| POST | `/api/bookings` | 按 `lockId` 确认预约，生成预约码与二维码凭证，发送站内/邮件/短信（邮件短信为模拟输出） |
+| POST | `/api/bookings/lock` | 锁定时段 10 分钟，返回 lockId / 倒计时；被抢占返回 409 + 相邻推荐 |
+| POST | `/api/bookings` | 按 lockId 确认预约（生成预约码 + 二维码凭证 + 通知） |
 | GET | `/api/bookings/mine?status=&date=` | 我的预约 |
 | GET | `/api/bookings/:id` | 预约详情 |
-| POST | `/api/bookings/:id/cancel` | 取消预约（距开场 ≥ 2 小时才允许自助取消，取消后时段立即释放） |
+| POST | `/api/bookings/:id/cancel` | 取消（距开场 ≥2 小时可自助，取消后时段释放） |
 
-时间段被人抢先时返回 `409`，并在 `error.suggestions` 给出相邻可约时段，`error.conflicts` 说明冲突原因。
-
-### 场馆管理员后台（对应大型需求 3）
+### 管理后台（需 admin）
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | `/api/admin/venues` | 新建场馆（名称、地址、运动类型、开放时间、时段长度） |
-| PATCH | `/api/admin/venues/:id` | 修改场馆信息/营业状态 |
-| POST | `/api/admin/venues/:id/courts` | 新增场地（名称、每小时价格） |
-| PATCH | `/api/admin/courts/:id` | 修改场地价格/状态 |
-| POST | `/api/admin/overrides` | 把时段标记为 `maintenance`（维护中）或 `closed`（临时关闭），并提示是否与已有预约冲突 |
-| GET / DELETE | `/api/admin/overrides[/:id]` | 查看/撤销时段标记 |
-| GET | `/api/admin/bookings?date=&status=` | 全站预约总览 |
-| POST | `/api/admin/bookings/:id/cancel` | 强制取消预约并通知用户（自动 +2 积分补偿） |
-| GET | `/api/admin/report?days=7&from=` | 未来 N 天报表：场馆/每日预约量、时段利用率、营收 |
-| GET | `/api/admin/users?q=` | 用户查询 |
+| POST / PATCH / DELETE | `/api/admin/venues[/:id]` | 新增 / 修改 / 删除场馆 |
+| POST / PATCH / DELETE | `/api/admin/venues/:id/courts`、`/api/admin/courts/:id` | 新增 / 修改 / 删除场地 |
+| POST / GET / DELETE | `/api/admin/overrides[/:id]` | 维护中 / 临时关闭标记 |
+| GET / POST | `/api/admin/bookings`、`/api/admin/bookings/:id/cancel` | 预约总览 / 强制取消 |
+| GET / PATCH / DELETE | `/api/admin/users[/:id]` | 用户查询 / 改角色积分 / 删除 |
+| GET | `/api/admin/report?days=7&from=` | 未来 N 天报表（预约量、利用率、营收） |
+| GET | `/api/admin/stats` | 数据库概览（路径、大小、各表行数、运行时长、SSE 数） |
+| GET | `/api/admin/db/:table?limit=&offset=&q=` | 只读浏览数据表（白名单，用户表自动脱敏） |
+| GET | `/api/admin/health` | 后台健康检查 |
 
 ## 关键实现说明
 
-- **先到先得不超卖**：一次锁定 = 「查冲突 + 写锁」在同一个同步事务里完成；Node 单线程 + SQLite 事务
-  保证并发下只有一个请求能写入，其余返回 409。`locks.expires_at` 到期后由后台清扫任务（每 30 秒）回收并广播释放。
-- **时段模型**：场馆配置开放时间与时段长度（默认 60 分钟），预约按「日期 + 起止分钟」存储，
-  可用性 = 场馆时段格子 − 已确认预约 − 有效锁定 − 维护/关闭标记，优先级 `closed > maintenance > booked > locked`。
-- **取消规则**：自助取消需距开场 ≥ 2 小时；管理员可随时强制取消（用户积分 +2 作为补偿）。
-- **积分/信用分**：注册送 100 分，完成一次预约 +1，被场馆强制取消 +2。
-- **实时性**：用 SSE（而非 WebSocket）+ 内存广播，省掉 Redis；多实例部署时把 `events.js`
-  换成 Redis Pub/Sub 即可，业务代码不用改。
-- **数据落盘**：`data/app.db`（SQLite，WAL 模式）。想换 PostgreSQL，只需替换 `db.js` 里的
-  预编译语句层，`core.js` 之上的业务逻辑不受影响。
+- **先到先得不超卖**：一次锁定 = 「查冲突 + 写锁」在同一同步事务里完成；Node 单线程 + SQLite 事务
+  保证并发下只有一个请求成功。测试里 12 个并发请求抢同一时段：1 成功 / 11 个 409。
+- **时段模型**：场馆配置开放时间与时段长度，可用性 = 时段格子 − 已确认预约 − 有效锁定 − 维护/关闭标记，
+  优先级 `closed > maintenance > booked > locked`。
+- **取消规则**：自助取消需距开场 ≥ 2 小时；管理员可随时强制取消（用户 +2 积分补偿）。
+- **实时性**：SSE + 内存广播代替 WebSocket / Redis；多实例部署时替换 `events.js` 即可。
+- **前端零构建**：原生 ESM + hash 路由，浏览器直接加载，改完刷新即生效。
 
-## 与 PRD 目标的对应
+## 与 PRD 的对应
 
-PRD 里「6 个月利用率 45%→75%、重复预约冲突率 < 0.1%」依赖线上数据。
-本实现提供了度量手段：`GET /api/admin/report?days=7` 直接给出各场馆时段利用率与预约量；
-冲突率可从锁定接口的 409 计数（日志中的 `POST /api/bookings/lock 409`）统计。
+| PRD 大型需求 | 实现 |
+| --- | --- |
+| 场馆与场地实时查询（自动刷新、筛选） | 场馆列表 + 时段轴 + 运动类型/日期/关键词筛选 + SSE 推送 |
+| 先到先得锁定 10 分钟、冲突推荐相邻时段 | 锁定接口 + 409 冲突 + 相邻时段推荐 + 定时回收 |
+| 预约通知凭证、我的预约、取消释放 | 预约码/二维码、站内信、自助取消（2 小时规则） |
+| 管理员后台 | 场馆/场地/时段/预约/用户管理与 7 天报表 |
+| 账户与实名、积分 | 注册登录、实名认证、积分体系 |
 
-## 尚未做的（按需再加）
+## 未实现（按需再加）
 
-真实支付渠道对接、短信/邮件真实网关、实名认证三方校验、多实例 Redis 锁、前端 React 工程。
-这些都不影响当前流程演示与联调。
+真实支付渠道、真实短信/邮件网关、实名认证三方校验、多实例部署。前端未使用框架（React 等），
+如需工程化前端可在 `frontend/` 基础上替换为 Vite + React，接口无需改动。
+
+## 环境变量
+
+均可留空：`PORT`、`HOST`、`DB_PATH`、`TOKEN_SECRET`、`LOCK_MINUTES`（默认 10）、
+`CANCEL_HOURS`（默认 2）、`BOOKING_DAYS_AHEAD`（默认 30）、`HTTP_LOG=0`（关请求日志）。
