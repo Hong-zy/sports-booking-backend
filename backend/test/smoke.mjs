@@ -23,6 +23,7 @@ import { validateVenueInput } from '../../shared/validate.js';
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'booking-test-'));
 process.env.DB_PATH = path.join(tmpDir, 'test.db');
 process.env.HTTP_LOG = '0';
+process.env.AI_API_KEY = ''; // 测试固定使用本地规则模式（结果可复现）
 
 const { createApp } = await import('../src/app.js');
 const { toDateStr } = await import('../src/util.js');

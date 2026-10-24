@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_BUSINESS } from '../../shared/constants.js';
@@ -8,9 +9,37 @@ import { DEFAULT_BUSINESS } from '../../shared/constants.js';
  *   <repo>/frontend/   static SPA
  *   <repo>/shared/     frontend & backend 公用模块
  *   <repo>/data/       SQLite 数据库文件
+ *   <repo>/.env        本地环境变量（已 gitignore，不上传仓库）
  */
 const here = path.dirname(fileURLToPath(import.meta.url)); // backend/src
 const root = path.dirname(path.dirname(here)); // 仓库根目录
+
+/**
+ * 读取仓库根目录的 .env（极简实现，零依赖）。
+ * 规则：已存在的环境变量优先（便于平台注入覆盖），支持 # 注释与引号。
+ */
+function loadDotEnv(file) {
+  try {
+    if (!fs.existsSync(file)) return;
+    const text = fs.readFileSync(file, 'utf8');
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      let value = trimmed.slice(eq + 1).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      if (process.env[key] === undefined) process.env[key] = value;
+    }
+  } catch (err) {
+    console.warn('[env] 读取 .env 失败：', err.message);
+  }
+}
+
+loadDotEnv(path.join(root, '.env'));
 
 export const config = {
   root,

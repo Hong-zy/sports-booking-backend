@@ -253,6 +253,15 @@ AI  ：按「运动：羽毛球，日期：明天，时长：2 小时」帮你�
 
 ### 配置
 
+推荐用 `.env` 文件（已 gitignore，不会被提交）：
+
+```bash
+cp .env.example .env      # 然后编辑 .env 填入 AI_API_KEY
+node backend/src/server.js
+```
+
+也可以直接用环境变量：
+
 ```bash
 # Windows PowerShell
 $env:AI_API_KEY="sk-xxxx"          # 不配置则自动使用本地规则引擎
@@ -260,3 +269,6 @@ $env:AI_BASE_URL="https://api.deepseek.com/v1"
 $env:AI_MODEL="deepseek-chat"
 node backend/src/server.js
 ```
+
+> 平台部署（Render 等）时在控制台环境变量里填 `AI_API_KEY` 即可，无需改动代码。
+> `.env` 已被 `.gitignore` 忽略；仓库中只保留不含密钥的 `.env.example`。
