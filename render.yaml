@@ -1,0 +1,26 @@
+# Render Blueprint：在 Render 控制台 New → Blueprint 选择本仓库即可一键建服务
+# 文档：https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: sports-booking-system
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+    numInstances: 1          # 必须保持 1：SQLite 不能多实例并发写
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TZ
+        value: Asia/Shanghai
+      - key: HTTP_LOG
+        value: "0"
+    # ↓↓↓ 免费版没有持久化磁盘，重启/重新部署后数据库会重置为初始演示数据。
+    #     升级到付费实例后取消下面注释，即可把 SQLite 存到磁盘上（/app/data 正好是默认库路径）。
+    # disk:
+    #   name: sqlite-data
+    #   mountPath: /app/data
+    #   sizeGB: 1
