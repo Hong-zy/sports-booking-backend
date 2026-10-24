@@ -147,3 +147,22 @@ curl https://你的域名/api/venues
 ```
 
 两条都返回 JSON 且不报错，说明网站已经跑通。
+
+## 七、AI 能力配置（可选但推荐）
+
+系统支持「大模型 + 本地规则」双模式：
+
+- **不配置 Key**：自动使用本地规则引擎，AI 预约助手与经营分析功能完整可用（离线演示也不受影响）；
+- **配置 Key**：自动切换为大模型（默认 DeepSeek，任何 OpenAI 兼容接口均可）。
+
+在 Render 服务页 → **Environment** 添加：
+
+| 变量 | 值 | 说明 |
+| --- | --- | --- |
+| `AI_API_KEY` | `sk-...` | 你的 DeepSeek API Key（不填则用本地规则） |
+| `AI_BASE_URL` | `https://api.deepseek.com/v1` | 兼容接口地址 |
+| `AI_MODEL` | `deepseek-chat` | 模型名 |
+
+保存后 Render 会自动重新部署，等待状态变成 Live 即可。验证方式：访问 `/api/ai/status`，返回 `"enabled": true` 表示大模型已生效。
+
+费用参考：DeepSeek 约 ¥1/百万 token，课堂演示几百次对话成本可忽略。

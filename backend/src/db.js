@@ -94,10 +94,21 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 
+  -- AI 助手的提问日志（记录走了大模型还是本地规则，便于后台查看与答辩演示）
+  CREATE TABLE IF NOT EXISTS ai_logs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    question    TEXT NOT NULL,
+    mode        TEXT NOT NULL DEFAULT 'rule',
+    intent_json TEXT NOT NULL DEFAULT '{}',
+    created_at  TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_locks_court_date   ON locks(court_id, date, status);
   CREATE INDEX IF NOT EXISTS idx_bookings_court     ON bookings(court_id, date, status);
   CREATE INDEX IF NOT EXISTS idx_bookings_user      ON bookings(user_id, status);
   CREATE INDEX IF NOT EXISTS idx_overrides_court    ON slot_overrides(court_id, date);
+  CREATE INDEX IF NOT EXISTS idx_ai_logs_created    ON ai_logs(created_at);
 `);
 
 const prepareCache = new Map();

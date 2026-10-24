@@ -249,6 +249,22 @@ export const api = {
     table(table, { limit, offset, q } = {}) {
       return request('GET', `/admin/db/${encodeURIComponent(table)}`, { query: { limit, offset, q } });
     },
+    aiInsights(days = 7) {
+      return request('GET', '/admin/ai/insights', { query: { days } });
+    },
+  },
+
+  /* ---------------------------------- AI ---------------------------------- */
+  ai: {
+    status() {
+      return request('GET', '/ai/status');
+    },
+    chat(message) {
+      return request('POST', '/ai/chat', { body: { message } });
+    },
+    recommend(payload) {
+      return request('POST', '/ai/recommend', { body: payload });
+    },
   },
 };
 

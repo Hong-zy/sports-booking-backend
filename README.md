@@ -3,7 +3,7 @@
 按 PRD《运动场馆易约》实现的可用版系统，**零第三方依赖**（Node 内置 `http` + `node:sqlite`），
 开箱即跑，不需要 Redis / PostgreSQL / `npm install`。
 
-v2 相比 v1 的三点变化：
+v3 相比 v2 的变化：新增 **AI 能力**（对话式预约助手 + AI 经营分析，支持大模型与本地规则双模式）。`n`nv2 相比 v1 的三点变化：
 
 1. **代码拆成三块**：`frontend/`（原生 JS 单页应用）、`backend/`（HTTP + 业务 + SQLite）、`shared/`（前后端公用常量、时间工具、表单校验）；
 2. **数据库可编辑**：管理后台可以对场馆、场地、时段标记、预约、用户做增删改，并带「数据库」页直接查看表结构与数据；
@@ -29,7 +29,7 @@ Windows 下也可以直接**双击 `1-启动服务.bat`**，脚本会启动服�
 | 普通用户 | `13800000002` | `user123456` |
 
 跑一遍端到端自测（`npm test`，或双击 `2-运行自测.bat`）：覆盖账号、场馆查询、先到先得锁定、
-并发不超卖、取消规则、SSE 推送、后台 CRUD、数据库浏览、前端静态资源等 79 项断言。
+并发不超卖、取消规则、SSE 推送、后台 CRUD、数据库浏览、前端静态资源、AI 意图解析/推荐/经营分析等 97 项断言。
 
 ## 作业验收
 
@@ -214,4 +214,49 @@ WAL 模式 + 外键约束。表结构：
 ## 环境变量
 
 均可留空：`PORT`、`HOST`、`DB_PATH`、`TOKEN_SECRET`、`LOCK_MINUTES`（默认 10）、
-`CANCEL_HOURS`（默认 2）、`BOOKING_DAYS_AHEAD`（默认 30）、`HTTP_LOG=0`（关请求日志）。
+`CANCEL_HOURS`（默认 2）、`BOOKING_DAYS_AHEAD`（默认 30）、`HTTP_LOG=0`（关请求日志）、
+`AI_API_KEY`（配置后启用大模型，不配则自动降级为本地规则引擎）、`AI_BASE_URL`（默认 DeepSeek）、`AI_MODEL`（默认 deepseek-chat）、`AI_TIMEOUT_MS`（默认 15000）。
+
+## AI 能力（v3 新增）
+
+系统具备两项 AI 能力，且**双模式运行**：配置了 `AI_API_KEY` 时调用真实大模型（DeepSeek / 任意 OpenAI 兼容接口，后端内置 `fetch`，仍保持零 npm 依赖）；未配置或调用失败时自动降级为**本地规则引擎**，离线也能完整演示。
+
+### 1. AI 预约助手（对话式）
+
+右下角「🤖 AI 预约助手」：用户用一句话描述需求，系统解析意图并直接推荐可约时段，可一键锁定并完成预约。
+
+```
+用户：明天下午帮我订 2 小时羽毛球
+AI  ：按「运动：羽毛球，日期：明天，时长：2 小时」帮你找到 2 个可约时段。
+      最推荐：城市体育中心羽毛球馆 1 号场，08:00-10:00，¥80。
+      [去预约]  → 锁定 10 分钟 → [确认预约] → 生成凭证
+```
+
+- 意图解析：运动类型、相对/绝对日期、时间段、时长、价格/空闲偏好；
+- 推荐：复用现有可用性引擎（时段 − 预约 − 锁定 − 维护），支持价格优先、接近指定时间等排序；
+- 大模型可用时还会额外生成自然语言回复；每次提问写入 `ai_logs` 表（后台数据库页可见）。
+
+### 2. AI 经营分析（管理员）
+
+管理后台 →「经营报表」→「🤖 AI 经营分析」：读取当前周期的预约量、利用率、营收，输出运营摘要、关键亮点与可执行建议。
+
+### 接口与数据
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /api/ai/status` | 当前模式（llm/rule）、模型名、快捷话术 |
+| `POST /api/ai/chat` | 对话式预约：`{message}` → `{reply, intent, candidates, mode}` |
+| `POST /api/ai/recommend` | 结构化推荐：`{sport,date,startTime,durationMinutes}` |
+| `GET /api/admin/ai/insights?days=7` | 经营分析：`{summary, highlights, suggestions, mode}` |
+
+新增数据表 `ai_logs`（提问日志）；新增共用模块 `shared/ai-schema.js`（模式/标签/快捷话术，前后端共用）。
+
+### 配置
+
+```bash
+# Windows PowerShell
+$env:AI_API_KEY="sk-xxxx"          # 不配置则自动使用本地规则引擎
+$env:AI_BASE_URL="https://api.deepseek.com/v1"
+$env:AI_MODEL="deepseek-chat"
+node backend/src/server.js
+```

@@ -24,4 +24,11 @@ export const config = {
   lockMinutes: Number(process.env.LOCK_MINUTES || DEFAULT_BUSINESS.lockMinutes),
   cancelHours: Number(process.env.CANCEL_HOURS || DEFAULT_BUSINESS.cancelHours),
   bookingDaysAhead: Number(process.env.BOOKING_DAYS_AHEAD || DEFAULT_BUSINESS.bookingDaysAhead),
+
+  /* ------------------------------ AI 能力 ------------------------------ */
+  // 配置了 key 就走真实大模型；不配置时自动降级为本地规则引擎（离线可用）
+  aiApiKey: process.env.AI_API_KEY || '',
+  aiBaseUrl: process.env.AI_BASE_URL || 'https://api.deepseek.com/v1',
+  aiModel: process.env.AI_MODEL || 'deepseek-chat',
+  aiTimeoutMs: Number(process.env.AI_TIMEOUT_MS || 15000),
 };

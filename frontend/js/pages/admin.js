@@ -1446,6 +1446,18 @@ async function renderReportTab(panel, ctx) {
       </div>
     </div>
     <div id="report-body">${loadingHtml('正在生成报表…')}</div>
+    <div class="ai-insight" id="ai-insight">
+      <div class="ai-insight__head">
+        <div>
+          <h3>🤖 AI 经营分析</h3>
+          <p>由 AI 读取当前报表数据，生成运营摘要、关键亮点与可执行建议。</p>
+        </div>
+        <button type="button" class="btn btn--primary" id="ai-insight-btn">生成分析</button>
+      </div>
+      <div id="ai-insight-body" class="ai-insight__body text-muted">
+        点击「生成分析」，AI 会结合当前周期的预约量、利用率与营收给出运营建议。
+      </div>
+    </div>
   </section>`;
 
   const bodyEl = panel.querySelector('#report-body');
@@ -1539,6 +1551,40 @@ async function renderReportTab(panel, ctx) {
       });
       loadReport();
     });
+  });
+
+  // AI 经营分析：点击按钮时按当前周期取数
+  const aiButton = panel.querySelector('#ai-insight-btn');
+  const aiBody = panel.querySelector('#ai-insight-body');
+  aiButton?.addEventListener('click', async () => {
+    if (!ctx.isActive()) return;
+    aiButton.disabled = true;
+    const originText = aiButton.textContent;
+    aiButton.textContent = '分析中…';
+    aiBody.innerHTML = loadingHtml('AI 正在分析经营数据…');
+    try {
+      const insight = await api.admin.aiInsights(days);
+      if (!ctx.isActive()) return;
+      const modeLabel = insight.mode === 'llm' ? '大模型' : '本地规则';
+      const toList = (items) =>
+        `<ul class="ai-insight__list">${(items || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`;
+      aiBody.innerHTML = `
+        <div class="ai-insight__meta">
+          <span class="ai-badge ai-badge--${escapeHtml(insight.mode || 'rule')}">${escapeHtml(modeLabel)}</span>
+          <span class="text-sm text-muted">生成于 ${escapeHtml(fmtDateTime(insight.generatedAt))}</span>
+        </div>
+        <p class="ai-insight__summary">${escapeHtml(insight.summary || '')}</p>
+        <div class="ai-insight__grid">
+          <div class="ai-insight__col"><h4>关键亮点</h4>${toList(insight.highlights)}</div>
+          <div class="ai-insight__col"><h4>运营建议</h4>${toList(insight.suggestions)}</div>
+        </div>`;
+    } catch (err) {
+      if (!ctx.isActive()) return;
+      aiBody.innerHTML = `<div class="ai-error">${escapeHtml(errText(err, 'AI 分析失败'))}</div>`;
+    } finally {
+      aiButton.disabled = false;
+      aiButton.textContent = originText;
+    }
   });
 
   await loadReport();

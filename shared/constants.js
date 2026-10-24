@@ -107,6 +107,7 @@ export const DB_TABLES = [
   'bookings',
   'slot_overrides',
   'notifications',
+  'ai_logs',
 ];
 
 export const DB_TABLE_LABEL = {
@@ -117,6 +118,7 @@ export const DB_TABLE_LABEL = {
   bookings: '预约',
   slot_overrides: '维护/关闭标记',
   notifications: '站内通知',
+  ai_logs: 'AI 提问日志',
 };
 
 /* ---------------------------------- API ---------------------------------- */

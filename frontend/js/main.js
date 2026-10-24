@@ -22,6 +22,7 @@ import {
   toast,
 } from './ui.js';
 import { renderAdminPage } from './pages/admin.js';
+import { mountAssistant } from './pages/assistant.js';
 import {
   renderMinePage,
   renderNotificationsPage,
@@ -510,6 +511,7 @@ function renderCurrentPage(force = false) {
 /* ========================================================================== */
 
 async function bootstrap() {
+  mountAssistant();
   renderHeader();
   let sessionExpiredOnBoot = false;
 
@@ -572,6 +574,11 @@ window.addEventListener(AUTH_EXPIRED_EVENT, (event) => {
 
 // 网络离线提示（可选增强，不影响主流程）
 window.addEventListener('offline', () => toast('网络已断开，请检查连接', 'warning'));
+
+// AI 助手在未登录时点「去预约」会请求打开登录框
+window.addEventListener('app:require-login', () => {
+  openAuthModal('login', null);
+});
 
 bootstrap().catch((err) => {
   console.error('[bootstrap]', err);

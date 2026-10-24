@@ -10,6 +10,7 @@ import { createRouter } from './router.js';
 import { sweep } from './core.js';
 import { APP_NAME, APP_VERSION } from '../../shared/constants.js';
 import { registerRoutes as registerAdmin } from './routes/admin.js';
+import { registerRoutes as registerAi } from './routes/ai.js';
 import { registerRoutes as registerAuth } from './routes/auth.js';
 import { registerRoutes as registerBookings } from './routes/bookings.js';
 import { registerRoutes as registerVenues } from './routes/venues.js';
@@ -128,6 +129,7 @@ export function createApp({ withSweeper = true } = {}) {
   registerVenues(router);
   registerBookings(router);
   registerAdmin(router);
+  registerAi(router);
 
   // 公共健康检查（前端启动时可用它确认后端在线）
   router.get('/api/health', () => ({

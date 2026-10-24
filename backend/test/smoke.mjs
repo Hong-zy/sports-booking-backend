@@ -207,7 +207,7 @@ try {
 
   console.log('\n[9] shared 前后端公用模块');
   ok('公用常量：时段状态文案一致', SLOT_STATUS_LABEL.locked === '锁定中' && SLOT_STATUS_LABEL.booked === '已预约');
-  ok('公用常量：数据库表白名单', DB_TABLES.length === 7 && DB_TABLES.includes('bookings'));
+  ok('公用常量：数据库表白名单', DB_TABLES.length === 8 && DB_TABLES.includes('bookings') && DB_TABLES.includes('ai_logs'));
   ok('公用时间工具可双向转换', toHM(parseHM('09:30')) === '09:30' && parseHM('25:00') === null);
   ok('公用校验器拦截非法场馆', validateVenueInput({ name: '', sport: '', openTime: '22:00', closeTime: '08:00', slotMinutes: 5 }).length >= 3);
   ok('公用校验器放行合法场馆', validateVenueInput({ name: '合规场馆', sport: '羽毛球', openTime: '08:00', closeTime: '22:00', slotMinutes: 60 }).length === 0);
@@ -267,6 +267,47 @@ try {
   const css = await fetch(`${base}/css/styles.css`);
   ok('前端样式文件可访问', css.status === 200);
   ok('不存在的静态资源返回 404', (await fetch(`${base}/nope.js`)).status === 404);
+
+  console.log('\n[12] AI 能力（本地规则引擎 + 经营分析）');
+  const aiStatus = await api('GET', '/api/ai/status');
+  ok('AI 状态接口可用', aiStatus.status === 200 && typeof aiStatus.data.enabled === 'boolean' && Array.isArray(aiStatus.data.hints));
+  ok('未配置 key 时自动降级为本地规则', aiStatus.data.enabled === false && aiStatus.data.mode === 'rule');
+
+  const aiChat = await api('POST', '/api/ai/chat', { body: { message: '明天下午帮我订2小时羽毛球' } });
+  ok('AI 对话返回回复与候选项', aiChat.status === 200 && typeof aiChat.data.reply === 'string' && aiChat.data.reply.length > 10);
+  ok('意图识别：运动类型 = 羽毛球', aiChat.data.intent.sport === '羽毛球');
+  ok('意图识别：相对日期「明天」换算正确', aiChat.data.intent.date === tomorrow());
+  ok('意图识别：时长 2 小时 = 120 分钟', aiChat.data.intent.durationMinutes === 120);
+  ok('候选项均为 2 小时连续可约时段', aiChat.data.candidates.length > 0
+    && aiChat.data.candidates.every((c) => c.endMin - c.startMin === 120));
+  ok('候选项均在当前时间之后', aiChat.data.candidates.every(
+    (c) => new Date(`${c.date}T00:00:00`).getTime() + c.startMin * 60_000 > Date.now(),
+  ));
+  ok('AI 回复标注为本地规则模式', aiChat.data.mode === 'rule' && aiChat.data.modeLabel === '本地规则');
+
+  const aiCheap = await api('POST', '/api/ai/chat', { body: { message: '帮我找最便宜的网球时段' } });
+  ok('意图识别：运动类型 = 网球 且识别出价格偏好',
+    aiCheap.data.intent.sport === '网球' && aiCheap.data.intent.preferences.cheap === true);
+  const cheapAmounts = aiCheap.data.candidates.map((c) => c.amount);
+  ok('价格优先排序生效', cheapAmounts.length <= 1 || cheapAmounts[0] <= cheapAmounts[cheapAmounts.length - 1]);
+
+  ok('空消息被拒绝', (await api('POST', '/api/ai/chat', { body: { message: '' } })).status === 400);
+  ok('超长消息被拒绝', (await api('POST', '/api/ai/chat', { body: { message: 'x'.repeat(201) } })).status === 400);
+
+  const aiRec = await api('POST', '/api/ai/recommend', {
+    body: { sport: '篮球', date: day, startTime: '10:00', durationMinutes: 60 },
+  });
+  ok('结构化推荐接口同样可用', aiRec.status === 200 && aiRec.data.candidates.length > 0);
+
+  ok('AI 经营分析需要管理员权限', (await api('GET', '/api/admin/ai/insights')).status === 401);
+  const insights = await api('GET', '/api/admin/ai/insights?days=7', { token: admin });
+  ok('经营分析返回摘要 / 亮点 / 建议', insights.status === 200
+    && insights.data.summary.length > 10
+    && insights.data.highlights.length > 0
+    && insights.data.suggestions.length > 0);
+  ok('经营分析带聚合数据与模式标记', Boolean(insights.data.data) && ['rule', 'llm'].includes(insights.data.mode));
+  const aiLogs = await api('GET', '/api/admin/db/ai_logs?limit=10', { token: admin });
+  ok('AI 提问日志写入数据库', aiLogs.status === 200 && aiLogs.data.total >= 2);
 
   console.log(`\n全部通过：${passed} 项\n`);
 } catch (err) {
