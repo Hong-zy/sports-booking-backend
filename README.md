@@ -35,15 +35,6 @@ Windows 下也可以直接**双击 `1-启动服务.bat`**，脚本会启动服�
 
 本项目的作业说明（git 配置、同步记录、验收方式）见 **[作业说明.md](作业说明.md)**。
 
-## 部署上线（变成公网网站）
-
-仓库已内置 `Dockerfile`、`.dockerignore` 和 `render.yaml`，可直接部署到 Render / Railway / Zeabur / Koyeb
-等支持 Docker 的平台，或用自备服务器跑 Docker。完整步骤见 **[DEPLOY-部署上线.md](DEPLOY-部署上线.md)**。
-
-要点：平台会自动注入 `PORT`；免费版文件系统是临时的（重启后数据库重置为演示数据）；
-保持单实例运行（SQLite 不支持多实例并发写）；上线后请立刻修改默认管理员密码。
-
-
 ## 目录结构
 
 ```
@@ -270,5 +261,4 @@ $env:AI_MODEL="deepseek-chat"
 node backend/src/server.js
 ```
 
-> 平台部署（Render 等）时在控制台环境变量里填 `AI_API_KEY` 即可，无需改动代码。
 > `.env` 已被 `.gitignore` 忽略；仓库中只保留不含密钥的 `.env.example`。
