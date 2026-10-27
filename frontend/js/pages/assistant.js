@@ -280,9 +280,18 @@ export function mountAssistant() {
   api.ai
     .status()
     .then((status) => {
-      const label = status.enabled ? `大模型：${status.model}` : '本地规则引擎（未配置 API Key）';
+      const label = status.enabled ? `大模型：${status.model}` : '本地规则模式 · 未配置 API Key';
       state.elements.modeBadge.textContent = label;
       state.elements.modeBadge.dataset.mode = status.mode;
+      // 未配置 Key 时，把"为什么"和"怎么开"直接告诉使用者
+      if (!status.enabled) {
+        addSystemMessage(`
+          <div class="ai-welcome">
+            <p>💡 当前为<b>本地规则模式</b>（离线可用，功能完整）。<br />
+            想把回复升级为大模型：在<b>项目根目录</b>放一个 <code>.env</code> 文件（可复制 <code>.env.example</code>），
+            填入 <code>AI_API_KEY=sk-...</code> 后重启服务即可。</p>
+          </div>`);
+      }
     })
     .catch(() => {
       state.elements.modeBadge.textContent = 'AI 能力检测失败';
